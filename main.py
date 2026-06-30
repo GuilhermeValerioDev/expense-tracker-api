@@ -5,6 +5,9 @@ from sqlalchemy import select
 from database import get_db
 from models import User
 from schemas import UserCreate, UserResponse
+from pwdlib import PasswordHash
+
+password_hasher = PasswordHash.recommended()
 
 # podman container start expense-db
 # podman exec -it expense-db psql -U bism -d expense_tracker
@@ -30,7 +33,7 @@ def create_user(user: UserCreate, db: Session = Depends(get_db)):
     new_user = User(
         username = user.username,
         email = user.email,
-        password_hash = user.password
+        password_hash = password_hasher.hash(user.password)
     )
     db.add(new_user)
     db.commit()
