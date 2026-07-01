@@ -14,3 +14,10 @@ class UserResponse(BaseModel):
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class UserUpdate(BaseModel):
+    username: str | None = None
+    email: str | None = None
+    password: str | None = None
+
