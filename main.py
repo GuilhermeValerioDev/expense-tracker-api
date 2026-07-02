@@ -13,6 +13,7 @@ password_hasher = PasswordHash.recommended()
 # podman container start expense-db
 # podman exec -it expense-db psql -U bism -d expense_tracker
 
+# cd ~/Documents/The\ Vault\ -\ Linux/VS\ code\ Programing/Expense-Tracker-API/
 # uvicorn main:app --reload
 
 app = FastAPI()
@@ -72,3 +73,16 @@ def update_user(id: int, update_info: UserUpdate, db: Session = Depends(get_db))
     db.commit()
     db.refresh(current_user)
     return current_user
+
+
+@app.delete("/users/{id}")
+def delete_user(id: int, db: Session = Depends(get_db)):
+    find = db.execute(select(User).where(User.id == id))
+    result = find.scalars().one_or_none()
+
+    if result is None:
+        raise HTTPException(status_code=404, detail="User not Found")
+    
+    db.delete(result)
+    db.commit()
+    return {"message": f"Deleted user {id}"}
