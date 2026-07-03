@@ -45,21 +45,20 @@ def create_user(user: UserCreate, db: Session = Depends(get_db)):
 
 @app.get("/users/{id}", response_model=UserResponse)
 def get_single_user(id: int, db: Session = Depends(get_db)):
-    result = db.execute(select(User).where(User.id == id))
-    user = result.scalars().one_or_none()
+    user = db.execute(select(User).where(User.id == id)).scalars().one_or_none()
+    
     if user is None:
-        raise HTTPException(status_code=404, detail="User not Found.")
+        raise HTTPException(status_code=404, detail="User not found.")
 
     return(user)
 
 
 @app.put("/users/{id}", response_model=UserResponse)
 def update_user(id: int, update_info: UserUpdate, db: Session = Depends(get_db)):
-    result = db.execute(select(User).where(User.id == id))
-    current_user = result.scalars().one_or_none()
-
+    current_user = db.execute(select(User).where(User.id == id)).scalars().one_or_none()
+    
     if current_user is None:
-        raise HTTPException(status_code=404, detail="User not Found")
+        raise HTTPException(status_code=404, detail="User not found")
 
     if update_info.username is not None:
         current_user.username = update_info.username
@@ -77,12 +76,11 @@ def update_user(id: int, update_info: UserUpdate, db: Session = Depends(get_db))
 
 @app.delete("/users/{id}")
 def delete_user(id: int, db: Session = Depends(get_db)):
-    find = db.execute(select(User).where(User.id == id))
-    result = find.scalars().one_or_none()
+    user = db.execute(select(User).where(User.id == id)).scalars().one_or_none()
 
-    if result is None:
-        raise HTTPException(status_code=404, detail="User not Found")
+    if user is None:
+        raise HTTPException(status_code=404, detail="User not found")
     
-    db.delete(result)
+    db.delete(user)
     db.commit()
     return {"message": f"Deleted user {id}"}
