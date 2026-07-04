@@ -3,8 +3,8 @@ from fastapi import Depends
 from sqlalchemy.orm import Session
 from sqlalchemy import select
 from database import get_db
-from models import User
-from schemas import UserCreate, UserResponse, UserUpdate
+from models import User, Expense
+from schemas import UserCreate, UserResponse, UserUpdate, ExpenseCreate, ExpenseUpdate, ExpenseResponse
 from pwdlib import PasswordHash
 from fastapi import HTTPException
 
@@ -84,3 +84,76 @@ def delete_user(id: int, db: Session = Depends(get_db)):
     db.delete(user)
     db.commit()
     return {"message": f"Deleted user {id}"}
+
+
+@app.post("/expenses", response_model=ExpenseResponse)
+def create_expense(expense: ExpenseCreate, db: Session = Depends(get_db)):
+    user = db.execute(select(User).where(User.id == expense.user_id)).scalars().one_or_none()
+    if user is None:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    new_expense = Expense(
+        user_id = expense.user_id,
+        category = expense.category,
+        expense_date = expense.expense_date,
+        amount = expense.amount,
+        name = expense.name
+    )
+    db.add(new_expense)
+    db.commit()
+    db.refresh(new_expense)
+    return new_expense
+
+
+@app.get("/expenses", response_model=list[ExpenseResponse])
+def get_expenses(db: Session = Depends(get_db)):
+    result = db.execute(select(Expense))
+    expenses = result.scalars().all()
+    return expenses
+
+
+@app.get("/expenses/{id}", response_model=ExpenseResponse)
+def get_single_expense(id: int, db: Session = Depends(get_db)):
+    expense = db.execute(select(Expense).where(Expense.id == id)).scalars().one_or_none()
+
+    if expense is None:
+        raise HTTPException(status_code=404, detail="Expense not found.")
+
+    return expense
+
+
+@app.put("/expenses/{id}", response_model=ExpenseResponse)
+def update_expense(id: int, update_info: ExpenseUpdate, db: Session = Depends(get_db)):
+    current_expense = db.execute(select(Expense).where(Expense.id == id)).scalars().one_or_none()
+
+    if current_expense is None:
+        raise HTTPException(status_code=404, detail="Expense not found")
+
+    if update_info.name is not None:
+        current_expense.name = update_info.name
+
+    if update_info.category is not None:
+        current_expense.category = update_info.category
+
+    if update_info.amount is not None:
+        current_expense.amount = update_info.amount
+
+    if update_info.expense_date is not None:
+        current_expense.expense_date = update_info.expense_date
+
+    db.commit()
+    db.refresh(current_expense)
+    return current_expense
+
+
+@app.delete("/expenses/{id}")
+def delete_expense(id: int, db: Session = Depends(get_db)):
+    expense = db.execute(select(Expense).where(Expense.id == id)).scalars().one_or_none()
+
+    if expense is None:
+        raise HTTPException(status_code=404, detail="Expense not found")
+
+    db.delete(expense)
+    db.commit()
+    return {"message": f"Deleted expense {id}"}
+
