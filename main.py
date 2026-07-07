@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import select
 from database import get_db
 from models import User, Expense
-from schemas import UserCreate, UserResponse, UserUpdate, ExpenseCreate, ExpenseUpdate, ExpenseResponse
+from schemas import UserCreate, UserResponse, UserUpdate, ExpenseCreate, ExpenseUpdate, ExpenseResponse, LoginRequest
 from pwdlib import PasswordHash
 from fastapi import HTTPException
 
@@ -157,3 +157,15 @@ def delete_expense(id: int, db: Session = Depends(get_db)):
     db.commit()
     return {"message": f"Deleted expense {id}"}
 
+
+@app.post("/login")
+def login(login: LoginRequest, db: Session = Depends(get_db)):
+    user = db.execute(select(User).where(User.email == login.email)).scalars().one_or_none()
+
+    if user is None:
+        raise HTTPException(status_code=401, detail="Invalid credentials")
+    
+    if not password_hasher.verify(login.password, user.password_hash):
+        raise HTTPException(status_code=401, detail="Invalid credentials")
+    
+    return {"message": "Login successful!"}
