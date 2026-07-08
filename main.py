@@ -1,5 +1,5 @@
-from fastapi import FastAPI
-from fastapi import Depends
+from fastapi import FastAPI, Depends
+from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
 from sqlalchemy import select
 from database import get_db
@@ -7,8 +7,16 @@ from models import User, Expense
 from schemas import UserCreate, UserResponse, UserUpdate, ExpenseCreate, ExpenseUpdate, ExpenseResponse, LoginRequest
 from pwdlib import PasswordHash
 from fastapi import HTTPException
+from jose import jwt, JWTError
+from datetime import datetime, timedelta, UTC
 
 password_hasher = PasswordHash.recommended()
+
+SECRET_KEY = "replace-this-with-a-long-random-string"
+ALGORITHM = "HS256"
+ACCESS_TOKEN_EXPIRE_MINUTES = 30
+
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
 
 # podman container start expense-db
 # podman exec -it expense-db psql -U bism -d expense_tracker
@@ -17,6 +25,58 @@ password_hasher = PasswordHash.recommended()
 # uvicorn main:app --reload
 
 app = FastAPI()
+
+
+def create_access_token(user_id: int):
+    expire = datetime.now(UTC) + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+
+    payload = {
+        "sub": str(user_id),
+        "exp": expire
+    }
+
+    token = jwt.encode(
+        payload,
+        SECRET_KEY,
+        algorithm=ALGORITHM
+    )
+
+    return token
+
+
+def get_current_user(
+    token: str = Depends(oauth2_scheme),
+    db: Session = Depends(get_db)
+):
+    credentials_exception = HTTPException(
+        status_code=401,
+        detail="Invalid authentication credentials"
+    )
+
+    try:
+        payload = jwt.decode(
+            token,
+            SECRET_KEY,
+            algorithms=[ALGORITHM]
+        )
+
+        user_id = payload.get("sub")
+
+        if user_id is None:
+            raise credentials_exception
+
+    except JWTError:
+        raise credentials_exception
+
+    user = db.execute(
+        select(User).where(User.id == int(user_id))
+    ).scalars().one_or_none()
+
+    if user is None:
+        raise credentials_exception
+
+    return user
+
 
 @app.get("/")
 def read_root():
@@ -87,13 +147,10 @@ def delete_user(id: int, db: Session = Depends(get_db)):
 
 
 @app.post("/expenses", response_model=ExpenseResponse)
-def create_expense(expense: ExpenseCreate, db: Session = Depends(get_db)):
-    user = db.execute(select(User).where(User.id == expense.user_id)).scalars().one_or_none()
-    if user is None:
-        raise HTTPException(status_code=404, detail="User not found")
-    
+def create_expense(expense: ExpenseCreate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+
     new_expense = Expense(
-        user_id = expense.user_id,
+        user_id = current_user.id,
         category = expense.category,
         expense_date = expense.expense_date,
         amount = expense.amount,
@@ -106,15 +163,16 @@ def create_expense(expense: ExpenseCreate, db: Session = Depends(get_db)):
 
 
 @app.get("/expenses", response_model=list[ExpenseResponse])
-def get_expenses(db: Session = Depends(get_db)):
-    result = db.execute(select(Expense))
+def get_expenses(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    result = db.execute(select(Expense).where(Expense.user_id == current_user.id))
     expenses = result.scalars().all()
     return expenses
 
 
 @app.get("/expenses/{id}", response_model=ExpenseResponse)
-def get_single_expense(id: int, db: Session = Depends(get_db)):
-    expense = db.execute(select(Expense).where(Expense.id == id)).scalars().one_or_none()
+def get_single_expense(id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    expense = db.execute(
+        select(Expense).where(Expense.id == id, Expense.user_id == current_user.id)).scalars().one_or_none()
 
     if expense is None:
         raise HTTPException(status_code=404, detail="Expense not found.")
@@ -123,8 +181,9 @@ def get_single_expense(id: int, db: Session = Depends(get_db)):
 
 
 @app.put("/expenses/{id}", response_model=ExpenseResponse)
-def update_expense(id: int, update_info: ExpenseUpdate, db: Session = Depends(get_db)):
-    current_expense = db.execute(select(Expense).where(Expense.id == id)).scalars().one_or_none()
+def update_expense(id: int, update_info: ExpenseUpdate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    current_expense = db.execute(
+        select(Expense).where(Expense.id == id, Expense.user_id == current_user.id)).scalars().one_or_none()
 
     if current_expense is None:
         raise HTTPException(status_code=404, detail="Expense not found")
@@ -147,8 +206,9 @@ def update_expense(id: int, update_info: ExpenseUpdate, db: Session = Depends(ge
 
 
 @app.delete("/expenses/{id}")
-def delete_expense(id: int, db: Session = Depends(get_db)):
-    expense = db.execute(select(Expense).where(Expense.id == id)).scalars().one_or_none()
+def delete_expense(id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    expense = db.execute(
+        select(Expense).where(Expense.id == id, Expense.user_id == current_user.id)).scalars().one_or_none()
 
     if expense is None:
         raise HTTPException(status_code=404, detail="Expense not found")
@@ -168,4 +228,5 @@ def login(login: LoginRequest, db: Session = Depends(get_db)):
     if not password_hasher.verify(login.password, user.password_hash):
         raise HTTPException(status_code=401, detail="Invalid credentials")
     
-    return {"message": "Login successful!"}
+    return {"access_token": create_access_token(user.id),
+            "token_type": "bearer"}

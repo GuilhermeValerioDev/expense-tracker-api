@@ -23,7 +23,6 @@ class UserUpdate(BaseModel):
 
 
 class ExpenseCreate(BaseModel):
-    user_id: int
     name: str | None = None
     category: str
     amount: Decimal
