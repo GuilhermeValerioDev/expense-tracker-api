@@ -1,8 +1,10 @@
 from sqlalchemy import create_engine
 from sqlalchemy.orm import DeclarativeBase, sessionmaker, session
+from dotenv import load_dotenv
+import os
+from config import get_env
 
-
-DATABASE_URL = "postgresql+psycopg://bism:supersecret@localhost:5432/expense_tracker"
+DATABASE_URL = get_env("DATABASE_URL")
 
 engine = create_engine(DATABASE_URL)
 

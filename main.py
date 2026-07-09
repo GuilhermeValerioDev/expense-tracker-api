@@ -9,10 +9,13 @@ from pwdlib import PasswordHash
 from fastapi import HTTPException
 from jose import jwt, JWTError
 from datetime import datetime, timedelta, UTC
+from dotenv import load_dotenv
+import os
+from config import get_env
 
 password_hasher = PasswordHash.recommended()
 
-SECRET_KEY = "replace-this-with-a-long-random-string"
+SECRET_KEY = get_env("SECRET_KEY")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
 
