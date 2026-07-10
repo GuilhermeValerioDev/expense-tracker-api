@@ -21,12 +21,6 @@ ACCESS_TOKEN_EXPIRE_MINUTES = 30
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
 
-# podman container start expense-db
-# podman exec -it expense-db psql -U bism -d expense_tracker
-
-# cd ~/Documents/The\ Vault\ -\ Linux/VS\ code\ Programing/Expense-Tracker-API/
-# uvicorn main:app --reload
-
 app = FastAPI()
 
 
