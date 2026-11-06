@@ -1,23 +1,37 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
-from datetime import datetime
-from decimal import Decimal
 
-from models import Expense, User
-from database import get_db
 from app.routers.auth import get_current_user
-from schemas import ExpenseCreate, ExpenseUpdate, ExpenseResponse
+from database import get_db
+from models import Expense, User
+from schemas import ExpenseCreate, ExpenseResponse, ExpenseUpdate
 
 router = APIRouter(prefix="/expenses", tags=["expenses"])
 
 
-@router.post("/", response_model=ExpenseResponse)
+def _get_owned_expense(expense_id: int, user: User, db: Session) -> Expense:
+    expense = (
+        db.execute(
+            select(Expense).where(
+                Expense.id == expense_id,
+                Expense.user_id == user.id,
+            )
+        )
+        .scalars()
+        .one_or_none()
+    )
+    if expense is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Expense not found")
+    return expense
+
+
+@router.post("/", response_model=ExpenseResponse, status_code=status.HTTP_201_CREATED)
 def create_expense(
     expense: ExpenseCreate,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> Expense:
     new_expense = Expense(
         user_id=current_user.id,
         category=expense.category,
@@ -35,96 +49,54 @@ def create_expense(
 def get_expenses(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
-):
-    result = (
-        db.execute(select(Expense).where(Expense.user_id == current_user.id))
-        .scalars()
-        .all()
-    )
-    return result
+) -> list[Expense]:
+    expenses = db.execute(select(Expense).where(Expense.user_id == current_user.id)).scalars().all()
+    return list(expenses)
 
 
-@router.get("/{id}", response_model=ExpenseResponse)
+@router.get("/{expense_id}", response_model=ExpenseResponse)
 def get_single_expense(
-    id: int,
+    expense_id: int,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
-):
-    expense = (
-        db.execute(
-            select(Expense).where(
-                Expense.id == id,
-                Expense.user_id == current_user.id,
-            )
-        )
-        .scalars()
-        .one_or_none()
-    )
-
-    if expense is None:
-        raise HTTPException(status_code=404, detail="Expense not found.")
-
-    return expense
+) -> Expense:
+    return _get_owned_expense(expense_id, current_user, db)
 
 
-@router.put("/{id}", response_model=ExpenseResponse)
+@router.patch("/{expense_id}", response_model=ExpenseResponse)
 def update_expense(
-    id: int,
+    expense_id: int,
     update_info: ExpenseUpdate,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
-):
-    current_expense = (
-        db.execute(
-            select(Expense).where(
-                Expense.id == id,
-                Expense.user_id == current_user.id,
+) -> Expense:
+    current_expense = _get_owned_expense(expense_id, current_user, db)
+
+    # Only fields explicitly sent by the client are applied. This lets a
+    # nullable field such as "name" be cleared with an explicit null, while
+    # required fields still reject null.
+    updates = update_info.model_dump(exclude_unset=True)
+    for field in ("category", "amount", "expense_date"):
+        if field in updates and updates[field] is None:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail=f"{field} cannot be null",
             )
-        )
-        .scalars()
-        .one_or_none()
-    )
 
-    if current_expense is None:
-        raise HTTPException(status_code=404, detail="Expense not found")
-
-    if update_info.name is not None:
-        current_expense.name = update_info.name
-
-    if update_info.category is not None:
-        current_expense.category = update_info.category
-
-    if update_info.amount is not None:
-        current_expense.amount = update_info.amount
-
-    if update_info.expense_date is not None:
-        current_expense.expense_date = update_info.expense_date
+    for field, value in updates.items():
+        setattr(current_expense, field, value)
 
     db.commit()
     db.refresh(current_expense)
     return current_expense
 
 
-@router.delete("/{id}")
+@router.delete("/{expense_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_expense(
-    id: int,
+    expense_id: int,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
-):
-    expense = (
-        db.execute(
-            select(Expense).where(
-                Expense.id == id,
-                Expense.user_id == current_user.id,
-            )
-        )
-        .scalars()
-        .one_or_none()
-    )
-
-    if expense is None:
-        raise HTTPException(status_code=404, detail="Expense not found")
-
+) -> None:
+    expense = _get_owned_expense(expense_id, current_user, db)
     db.delete(expense)
     db.commit()
-    return {"message": f"Deleted expense {id}"}
