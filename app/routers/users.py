@@ -1,82 +1,68 @@
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import select
+from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
-from typing import Optional
-from datetime import datetime
-from schemas import UserCreate, UserResponse, UserUpdate
-from models import User
+
+from app.routers.auth import get_current_user, password_hasher
 from database import get_db
-from app.routers.auth import password_hasher
+from models import User
+from schemas import UserResponse, UserUpdateMe
 
 router = APIRouter(prefix="/users", tags=["users"])
 
 
-@router.get("/", response_model=list[UserResponse])
-def get_users(db: Session = Depends(get_db)):
-    result = db.execute(select(User))
-    users = result.scalars().all()
-    return users
+@router.get("/me", response_model=UserResponse)
+def get_me(current_user: User = Depends(get_current_user)) -> User:
+    return current_user
 
 
-@router.post("/", response_model=UserResponse)
-def create_user(user: UserCreate, db: Session = Depends(get_db)):
-    new_user = User(
-        username=user.username,
-        email=user.email,
-        password_hash=password_hasher.hash(user.password),
-    )
-    db.add(new_user)
-    db.commit()
-    db.refresh(new_user)
-    return new_user
+@router.patch("/me", response_model=UserResponse)
+def update_me(
+    update: UserUpdateMe,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> User:
+    email_changed = update.email is not None and update.email != current_user.email
+    password_changed = update.password is not None
 
+    if (email_changed or password_changed) and (
+        update.current_password is None
+        or not password_hasher.verify(
+            update.current_password,
+            current_user.password_hash,
+        )
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Current password is required to change your email or password",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
 
-@router.get("/{id}", response_model=UserResponse)
-def get_single_user(id: int, db: Session = Depends(get_db)):
-    user = (
-        db.execute(select(User).where(User.id == id))
-        .scalars()
-        .one_or_none()
-    )
+    if update.username is not None:
+        current_user.username = update.username
 
-    if user is None:
-        raise HTTPException(status_code=404, detail="User not found.")
+    if email_changed and update.email is not None:
+        current_user.email = update.email
 
-    return user
+    if password_changed and update.password is not None:
+        current_user.password_hash = password_hasher.hash(update.password)
 
+    try:
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Email already registered",
+        ) from exc
 
-@router.put("/{id}", response_model=UserResponse)
-def update_user(id: int, update_info: UserUpdate, db: Session = Depends(get_db)):
-    current_user = (
-        db.execute(select(User).where(User.id == id))
-        .scalars()
-        .one_or_none()
-    )
-
-    if current_user is None:
-        raise HTTPException(status_code=404, detail="User not found")
-
-    if update_info.username is not None:
-        current_user.username = update_info.username
-
-    if update_info.email is not None:
-        current_user.email = update_info.email
-
-    if update_info.password is not None:
-        current_user.password_hash = password_hasher.hash(update_info.password)
-
-    db.commit()
     db.refresh(current_user)
     return current_user
 
 
-@router.delete("/{id}")
-def delete_user(id: int, db: Session = Depends(get_db)):
-    user = ( db.execute(select(User).where(User.id == id)).scalars().one_or_none())
-
-    if user is None:
-        raise HTTPException(status_code=404, detail="User not found")
-
-    db.delete(user)
+@router.delete("/me", status_code=status.HTTP_204_NO_CONTENT)
+def delete_me(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> None:
+    db.delete(current_user)
     db.commit()
-    return {"message": f"Deleted user {id}"}
