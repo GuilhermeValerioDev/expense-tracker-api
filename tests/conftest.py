@@ -1,4 +1,3 @@
-import os
 from collections.abc import Generator
 from typing import Any
 
@@ -8,13 +7,10 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.engine import Engine, make_url
 from sqlalchemy.orm import Session, sessionmaker
 
-# Must be set before importing the app: it disables table creation in the
-# lifespan handler so tests control the schema themselves.
-os.environ.setdefault("SKIP_DB_INIT", "1")
-
-from config import settings  # noqa: E402
-from database import Base, get_db  # noqa: E402
-from main import app  # noqa: E402
+from app.core.config import settings
+from app.db.base import Base
+from app.db.session import get_db
+from app.main import app
 
 DEFAULT_PASSWORD = "password123"
 
@@ -106,7 +102,7 @@ def register_user(client: TestClient) -> Any:
         password: str = DEFAULT_PASSWORD,
     ) -> dict[str, Any]:
         response = client.post(
-            "/auth/register",
+            "/api/v1/auth/register",
             json={"username": username, "email": email, "password": password},
         )
         assert response.status_code == 201, response.text
@@ -119,7 +115,7 @@ def register_user(client: TestClient) -> Any:
 def login(client: TestClient) -> Any:
     def _login(email: str, password: str = DEFAULT_PASSWORD) -> dict[str, str]:
         response = client.post(
-            "/auth/login",
+            "/api/v1/auth/login",
             data={"username": email, "password": password},
         )
         assert response.status_code == 200, response.text

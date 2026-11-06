@@ -1,7 +1,7 @@
 import pytest
 from pydantic import ValidationError
 
-from config import Settings
+from app.core.config import Settings
 
 DATABASE_URL = "postgresql+psycopg://user:pass@localhost:5432/expense_tracker"
 
@@ -15,12 +15,10 @@ def _settings(secret_key: str = "x" * 32) -> Settings:
 
 
 def test_settings_defaults(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv("SKIP_DB_INIT", raising=False)
     monkeypatch.delenv("ACCESS_TOKEN_EXPIRE_MINUTES", raising=False)
 
     settings = _settings()
 
-    assert settings.skip_db_init is False
     assert settings.access_token_expire_minutes == 30
     assert settings.test_database_url is None
 
@@ -39,10 +37,8 @@ def test_settings_read_from_environment(monkeypatch: pytest.MonkeyPatch) -> None
     monkeypatch.setenv("DATABASE_URL", "postgresql+psycopg://user:pass@db:5432/other")
     monkeypatch.setenv("SECRET_KEY", "y" * 40)
     monkeypatch.setenv("ACCESS_TOKEN_EXPIRE_MINUTES", "15")
-    monkeypatch.setenv("SKIP_DB_INIT", "true")
 
     settings = Settings(_env_file=None)
 
     assert settings.database_url.endswith("/other")
     assert settings.access_token_expire_minutes == 15
-    assert settings.skip_db_init is True

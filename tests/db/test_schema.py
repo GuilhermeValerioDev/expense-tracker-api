@@ -7,7 +7,7 @@ from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from models import Expense
+from app.models import Expense
 
 
 def test_database_rejects_non_positive_amount(

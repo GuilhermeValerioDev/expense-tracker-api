@@ -1,17 +1,31 @@
 services:
-  api:
+  migrate:
     build: .
+    image: expense-tracker-api:local
+    command: ["alembic", "upgrade", "head"]
     env_file:
       - .env
     environment:
       # Inside the Compose network PostgreSQL is reachable as "postgres",
       # not as "localhost" (which is what .env uses for local development).
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
-    ports:
-      - "8000:8000"
     depends_on:
       postgres:
         condition: service_healthy
+    restart: "no"
+
+  api:
+    build: .
+    image: expense-tracker-api:local
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+    ports:
+      - "8000:8000"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
     healthcheck:
       test:
         - CMD

@@ -17,7 +17,6 @@ class Settings(BaseSettings):
     database_url: str
     secret_key: str = Field(min_length=32)
     test_database_url: str | None = None
-    skip_db_init: bool = False
     access_token_expire_minutes: int = Field(default=30, ge=1, le=1440)
 
     @field_validator("secret_key")

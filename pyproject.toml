@@ -16,6 +16,7 @@ dependencies = [
     "python-multipart>=0.0.32,<1.0.0",
     "pydantic-settings>=2.6,<3.0",
     "email-validator>=2.2,<3.0",
+    "alembic>=1.14,<2.0",
 ]
 
 [dependency-groups]
@@ -47,7 +48,7 @@ ignore = ["B008"]
 
 [tool.mypy]
 python_version = "3.13"
-files = ["app", "config.py", "database.py", "main.py", "models.py", "schemas.py", "tests"]
+files = ["app", "tests"]
 plugins = ["pydantic.mypy"]
 warn_unused_configs = true
 warn_redundant_casts = true
@@ -63,7 +64,7 @@ addopts = "-ra --strict-markers --strict-config"
 
 [tool.coverage.run]
 branch = true
-source = ["app", "config", "database", "main", "models", "schemas"]
+source = ["app"]
 
 [tool.coverage.report]
 exclude_lines = [

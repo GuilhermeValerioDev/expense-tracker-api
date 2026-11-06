@@ -46,6 +46,12 @@ jobs:
       - name: Install dependencies
         run: uv sync --frozen
 
+      - name: Apply migrations
+        run: uv run alembic upgrade head
+
+      - name: Check for schema drift
+        run: uv run alembic check
+
       - name: Lint
         run: uv run ruff check .
 
