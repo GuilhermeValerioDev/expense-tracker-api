@@ -8,6 +8,7 @@ from sqlalchemy.engine import Engine, make_url
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.core.config import settings
+from app.core.rate_limit import limiter
 from app.db.base import Base
 from app.db.session import get_db
 from app.main import app
@@ -69,6 +70,13 @@ def _clean_database(engine: Engine) -> Generator[None]:
     yield
     with engine.begin() as connection:
         connection.execute(text("TRUNCATE TABLE expenses, users RESTART IDENTITY CASCADE"))
+
+
+@pytest.fixture(autouse=True)
+def _reset_rate_limiter() -> Generator[None]:
+    limiter.reset()
+    yield
+    limiter.reset()
 
 
 @pytest.fixture

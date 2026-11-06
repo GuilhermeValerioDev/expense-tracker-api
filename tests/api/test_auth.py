@@ -211,3 +211,14 @@ def test_401_includes_www_authenticate_header(client: TestClient) -> None:
 
     assert response.status_code == 401
     assert response.headers["www-authenticate"] == "Bearer"
+
+
+def test_login_is_rate_limited(client: TestClient, user: dict[str, Any]) -> None:
+    credentials = {"username": user["email"], "password": "wrong-password"}
+
+    for _ in range(5):
+        response = client.post("/api/v1/auth/login", data=credentials)
+        assert response.status_code == 401
+
+    response = client.post("/api/v1/auth/login", data=credentials)
+    assert response.status_code == 429

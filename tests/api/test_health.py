@@ -20,3 +20,15 @@ def test_readiness_checks_database(client: TestClient) -> None:
 
     assert response.status_code == 200
     assert response.json() == {"status": "ok", "database": "ok"}
+
+
+def test_request_id_is_generated(client: TestClient) -> None:
+    response = client.get("/health")
+
+    assert response.headers.get("X-Request-ID")
+
+
+def test_request_id_is_echoed(client: TestClient) -> None:
+    response = client.get("/health", headers={"X-Request-ID": "test-request-id"})
+
+    assert response.headers["X-Request-ID"] == "test-request-id"
