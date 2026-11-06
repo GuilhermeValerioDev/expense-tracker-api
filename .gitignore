@@ -21,3 +21,6 @@ __pycache__/
 # Coverage reports
 .coverage
 htmlcov/
+
+# Local database backups
+backups/

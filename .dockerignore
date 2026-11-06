@@ -19,3 +19,9 @@ venv/
 
 tests/
 README.md
+docs/
+scripts/
+backups/
+compose*.yml
+Caddyfile
+Dockerfile

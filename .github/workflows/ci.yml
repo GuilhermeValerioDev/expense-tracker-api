@@ -11,7 +11,7 @@ concurrency:
 
 jobs:
   quality:
-    name: Lint, types and tests
+    name: Lint, types, tests and image
     runs-on: ubuntu-latest
 
     services:
@@ -32,6 +32,10 @@ jobs:
     env:
       DATABASE_URL: postgresql+psycopg://postgres:postgres@localhost:5432/expense_tracker
       SECRET_KEY: ci-only-secret-key-that-is-at-least-32-bytes-long
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: expense_tracker
+      SITE_ADDRESS: http://localhost
 
     steps:
       - name: Check out repository
@@ -63,3 +67,11 @@ jobs:
 
       - name: Run tests
         run: uv run pytest --cov --cov-report=term-missing
+
+      - name: Validate production Compose
+        run: |
+          cp .env.example .env
+          docker compose -f compose.yml -f compose.prod.yml config --quiet
+
+      - name: Build production image
+        run: docker build -t expense-tracker-api:ci .

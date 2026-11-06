@@ -19,6 +19,10 @@ database design, and API architecture rather than reproducing tutorial code.
 - Versioned API under `/api/v1` with a layered architecture
 - Schema migrations with Alembic
 - Health and readiness endpoints
+- Rate limiting on login and registration
+- Request IDs, structured JSON logging, and configurable CORS
+- Production Compose overlay with a Caddy TLS reverse proxy
+- Backup and restore scripts with a deployment runbook
 - PostgreSQL integration with SQLAlchemy 2.0 typed mappings
 - Automated tests against PostgreSQL, linting, type checking, and CI
 
@@ -31,7 +35,8 @@ database design, and API architecture rather than reproducing tutorial code.
 | Validation | Pydantic 2, pydantic-settings |
 | Auth | PyJWT, pwdlib (Argon2) |
 | Tooling | uv, pytest, ruff, mypy, pre-commit |
-| Infrastructure | Docker, Docker Compose, GitHub Actions |
+| Hardening | slowapi (rate limiting), CORS, request IDs, JSON logs |
+| Infrastructure | Docker, Docker Compose, Caddy, GitHub Actions |
 
 ## Architecture
 
@@ -92,6 +97,20 @@ docker compose up --build
 Compose starts PostgreSQL, waits for it to become healthy, runs the `migrate` service
 (`alembic upgrade head`), and only starts the API once migrations have completed.
 
+### 4. Production-style run (local)
+
+The production overlay runs the API behind Caddy, with the API and database ports closed to
+the host:
+
+```bash
+docker compose -f compose.yml -f compose.prod.yml up --build
+curl http://localhost/health/ready
+```
+
+Set `SITE_ADDRESS` to a real domain to enable automatic TLS when deploying. See
+[`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) for the full runbook, backup/restore procedure,
+updates, and rollback.
+
 ## Environment variables
 
 | Variable | Required | Description |
@@ -103,6 +122,8 @@ Compose starts PostgreSQL, waits for it to become healthy, runs the `migrate` se
 | `POSTGRES_DB` | Compose | PostgreSQL database name |
 | `TEST_DATABASE_URL` | no | Overrides the test database. Defaults to `<database>_test` on `localhost`. |
 | `ACCESS_TOKEN_EXPIRE_MINUTES` | no | Access-token lifetime in minutes (default `30`, max `1440`). |
+| `SITE_ADDRESS` | Compose | Caddy site address. `http://localhost` locally; a domain in production. |
+| `CORS_ORIGINS` | no | JSON list of allowed browser origins, e.g. `["https://app.example.com"]`. |
 
 ## API overview
 
@@ -236,8 +257,12 @@ Install the git hooks with `uv run pre-commit install`.
 │   ├── api/                   # Endpoint tests
 │   ├── core/                  # Settings tests
 │   └── db/                    # Schema and constraint tests
+├── docs/DEPLOYMENT.md         # VPS runbook, backups, rollback
+├── scripts/                   # backup.sh and restore.sh
 ├── alembic.ini                # Alembic configuration
-├── compose.yml                # API, migration job and PostgreSQL stack
+├── Caddyfile                  # Reverse proxy / TLS configuration
+├── compose.yml                # Development stack
+├── compose.prod.yml           # Production overlay (Caddy, no public DB/API ports)
 └── pyproject.toml             # Dependencies, tool configuration
 ```
 
@@ -251,6 +276,8 @@ Install the git hooks with `uv run pre-commit install`.
 - [x] Alembic database migrations
 - [x] Pagination, filtering, and sorting for expenses
 - [x] Service layer and a consistent `app/` package layout
+- [x] Login rate limiting, request IDs, CORS and structured logging
+- [x] Production Compose, Caddy reverse proxy and backup/restore tooling
 - [ ] Income tracking, categories as first-class data, and spending summaries
-- [ ] Refresh tokens, token revocation, and login rate limiting
-- [ ] Production deployment behind a reverse proxy with TLS and backups
+- [ ] Refresh tokens and token revocation
+- [ ] Deploy to a VPS with TLS and off-site backups
