@@ -13,9 +13,11 @@ __pycache__/
 # VS Code
 .vscode/
 
-# Pytest cache (for later)
+# Tooling caches
 .pytest_cache/
+.ruff_cache/
+.mypy_cache/
 
-# Coverage reports (for later)
+# Coverage reports
 .coverage
 htmlcov/
