@@ -16,6 +16,8 @@ database design, and API architecture rather than reproducing tutorial code.
 - User-scoped authorization: every expense query is filtered by the authenticated user
 - Expense CRUD with request/response validation
 - Pagination, filtering by category and date range, and sorting
+- Spending summaries grouped by category or month
+- Demo seed script and Makefile shortcuts for local walkthroughs
 - Versioned API under `/api/v1` with a layered architecture
 - Schema migrations with Alembic
 - Health and readiness endpoints
@@ -57,6 +59,29 @@ responses. This keeps business logic independent of FastAPI and reusable outside
 
 Application routes are versioned under `/api/v1`. `/health`, `/health/ready`, and `/` remain
 unversioned for infrastructure and discovery.
+
+### Data model
+
+```mermaid
+erDiagram
+    USER ||--o{ EXPENSE : owns
+    USER {
+        int id PK
+        string username
+        string email UK
+        string password_hash
+        datetime created_at
+    }
+    EXPENSE {
+        int id PK
+        int user_id FK
+        numeric amount
+        string category
+        string name
+        datetime expense_date
+        datetime created_at
+    }
+```
 
 ## Getting started
 
@@ -111,6 +136,28 @@ Set `SITE_ADDRESS` to a real domain to enable automatic TLS when deploying. See
 [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) for the full runbook, backup/restore procedure,
 updates, and rollback.
 
+### 5. Seed demo data
+
+```bash
+uv run python -m scripts.seed --reset
+```
+
+This creates `demo@example.com` / `demo-password-123` with 30 expenses spread over the last
+six months. It is intended for local development; `--reset` deletes and recreates the demo
+account.
+
+### Common commands
+
+| Command | What it does |
+| --- | --- |
+| `make dev` | Start PostgreSQL, apply migrations, run the API with reload |
+| `make test` | Run the test suite with coverage |
+| `make check` | Lint, format check, type check, and tests |
+| `make migrate` | Apply migrations |
+| `make seed` | Recreate the demo account and expenses |
+| `make prod` | Run the production-style stack behind Caddy |
+| `make backup` | Create a database dump |
+
 ## Environment variables
 
 | Variable | Required | Description |
@@ -136,6 +183,7 @@ updates, and rollback.
 | `DELETE` | `/api/v1/users/me` | Bearer | Delete the current account and its expenses |
 | `POST` | `/api/v1/expenses/` | Bearer | Create an expense |
 | `GET` | `/api/v1/expenses/` | Bearer | List the current user's expenses (paginated, filterable) |
+| `GET` | `/api/v1/expenses/summary` | Bearer | Totals grouped by category or month |
 | `GET` | `/api/v1/expenses/{id}` | Bearer | Read one of the current user's expenses |
 | `PATCH` | `/api/v1/expenses/{id}` | Bearer | Partially update one of the current user's expenses |
 | `DELETE` | `/api/v1/expenses/{id}` | Bearer | Delete one of the current user's expenses |
@@ -194,6 +242,33 @@ The response is an envelope so clients can paginate without guessing:
 
 `total` is the count after filters are applied, so it is the value to use for pagination
 controls. An inverted date range (`start_date` after `end_date`) returns 422.
+
+### Spending summary
+
+`GET /api/v1/expenses/summary` aggregates the authenticated user's expenses:
+
+| Parameter | Default | Description |
+| --- | --- | --- |
+| `group_by` | `category` | `category` or `month` (keys look like `2026-03`) |
+| `start_date` | – | Inclusive ISO-8601 lower bound |
+| `end_date` | – | Inclusive ISO-8601 upper bound |
+
+```json
+{
+  "group_by": "category",
+  "total": "182.40",
+  "items": [
+    { "key": "food", "total": "120.00", "count": 8 },
+    { "key": "transport", "total": "62.40", "count": 3 }
+  ]
+}
+```
+
+The same date-range validation applies: an inverted range returns 422.
+
+## Screenshots
+
+<!-- Add Imgur links here once available. Suggested: Swagger UI, expense list, summary. -->
 
 ## Migrations
 
@@ -258,13 +333,36 @@ Install the git hooks with `uv run pre-commit install`.
 │   ├── core/                  # Settings tests
 │   └── db/                    # Schema and constraint tests
 ├── docs/DEPLOYMENT.md         # VPS runbook, backups, rollback
-├── scripts/                   # backup.sh and restore.sh
+├── scripts/
+│   ├── backup.sh              # pg_dump wrapper
+│   ├── restore.sh             # pg_restore wrapper
+│   └── seed.py                # Demo account and expenses
 ├── alembic.ini                # Alembic configuration
 ├── Caddyfile                  # Reverse proxy / TLS configuration
 ├── compose.yml                # Development stack
 ├── compose.prod.yml           # Production overlay (Caddy, no public DB/API ports)
+├── Makefile                   # Common development and operations commands
 └── pyproject.toml             # Dependencies, tool configuration
 ```
+
+## Design decisions and trade-offs
+
+- **Layered architecture.** `api → services → models/schemas` keeps HTTP concerns separate
+  from business logic, so services can be reused by scripts and future workers.
+- **Domain exceptions.** Services raise `NotFoundError`, `ConflictError`,
+  `AuthenticationError`, and `ValidationError`; the HTTP layer maps them to responses.
+- **Alembic instead of `create_all`.** Schema history is reviewable and reversible, and CI
+  fails when models and migrations drift.
+- **PostgreSQL-only tests.** SQLite would hide numeric behavior, constraint checks, and
+  index semantics.
+- **Offset pagination.** Simple and supports page jumps, but large offsets get slower and
+  pages can shift when rows are inserted. Keyset pagination is the next step at scale.
+- **Access tokens only.** Short-lived JWTs with Argon2 hashing; refresh tokens and
+  revocation are a future hardening step.
+- **In-memory rate limiting.** Correct for one API process; Redis is needed for multiple
+  workers or replicas.
+- **Free-text categories.** Deliberately simple for now; first-class categories, budgets,
+  and income tracking are the next domain features.
 
 ## Roadmap
 
@@ -278,6 +376,12 @@ Install the git hooks with `uv run pre-commit install`.
 - [x] Service layer and a consistent `app/` package layout
 - [x] Login rate limiting, request IDs, CORS and structured logging
 - [x] Production Compose, Caddy reverse proxy and backup/restore tooling
-- [ ] Income tracking, categories as first-class data, and spending summaries
+- [x] Spending summaries by category and month
+- [x] Demo seed script, Makefile shortcuts and portfolio documentation
+- [ ] Income tracking, categories as first-class data, and budgets
 - [ ] Refresh tokens and token revocation
 - [ ] Deploy to a VPS with TLS and off-site backups
+
+## License
+
+MIT — see [LICENSE](LICENSE).

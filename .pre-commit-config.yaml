@@ -7,6 +7,8 @@ repos:
       - id: trailing-whitespace
       - id: end-of-file-fixer
       - id: check-yaml
+        # Compose's !reset tag is valid YAML for Docker but not for PyYAML.
+        exclude: ^compose\.prod\.yml$
       - id: check-toml
       - id: check-added-large-files
       - id: check-merge-conflict
