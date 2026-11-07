@@ -5,7 +5,13 @@ from fastapi import APIRouter, Query, status
 
 from app.api.deps import CurrentUser, SessionDep
 from app.models import Expense
-from app.schemas import ExpenseCreate, ExpensePage, ExpenseResponse, ExpenseUpdate
+from app.schemas import (
+    ExpenseCreate,
+    ExpensePage,
+    ExpenseResponse,
+    ExpenseSummary,
+    ExpenseUpdate,
+)
 from app.services import expenses as expense_service
 
 router = APIRouter(prefix="/expenses", tags=["expenses"])
@@ -40,6 +46,23 @@ def list_expenses(
         start_date=start_date,
         end_date=end_date,
         order=order,
+    )
+
+
+@router.get("/summary", response_model=ExpenseSummary)
+def summarize_expenses(
+    current_user: CurrentUser,
+    db: SessionDep,
+    group_by: Literal["category", "month"] = "category",
+    start_date: datetime | None = None,
+    end_date: datetime | None = None,
+) -> ExpenseSummary:
+    return expense_service.summarize_expenses(
+        db,
+        current_user,
+        group_by=group_by,
+        start_date=start_date,
+        end_date=end_date,
     )
 
 

@@ -27,7 +27,19 @@ def create_app() -> FastAPI:
             "A RESTful API for tracking personal expenses. "
             "Register, log in with a JWT, and manage your own expenses."
         ),
-        version="0.1.0",
+        version="1.0.0",
+        contact={
+            "name": "Guilherme Valerio",
+            "url": "https://github.com/GuilhermeValerioDev",
+        },
+        license_info={"name": "MIT"},
+        openapi_tags=[
+            {"name": "auth", "description": "Registration and login."},
+            {"name": "users", "description": "Self-service account management."},
+            {"name": "expenses", "description": "Expense CRUD, filtering and summaries."},
+            {"name": "health", "description": "Liveness and readiness probes."},
+            {"name": "meta", "description": "Service discovery."},
+        ],
     )
 
     app.state.limiter = limiter

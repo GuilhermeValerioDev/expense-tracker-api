@@ -1,12 +1,20 @@
 from datetime import datetime
-from typing import Literal
+from decimal import Decimal
+from typing import Any, Literal
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.exceptions import NotFoundError, ValidationError
 from app.models import Expense, User
-from app.schemas import ExpenseCreate, ExpensePage, ExpenseResponse, ExpenseUpdate
+from app.schemas import (
+    ExpenseCreate,
+    ExpensePage,
+    ExpenseResponse,
+    ExpenseSummary,
+    ExpenseSummaryItem,
+    ExpenseUpdate,
+)
 
 
 def _get_owned_expense(db: Session, user: User, expense_id: int) -> Expense:
@@ -80,6 +88,59 @@ def list_expenses(
         limit=limit,
         offset=offset,
     )
+
+
+def summarize_expenses(
+    db: Session,
+    user: User,
+    *,
+    group_by: Literal["category", "month"],
+    start_date: datetime | None,
+    end_date: datetime | None,
+) -> ExpenseSummary:
+    if start_date is not None and end_date is not None and start_date > end_date:
+        raise ValidationError("start_date must be earlier than or equal to end_date")
+
+    filters = [Expense.user_id == user.id]
+    if start_date is not None:
+        filters.append(Expense.expense_date >= start_date)
+    if end_date is not None:
+        filters.append(Expense.expense_date <= end_date)
+
+    bucket: Any
+    ordering: Any
+    if group_by == "category":
+        bucket = Expense.category
+        ordering = func.sum(Expense.amount).desc()
+    else:
+        bucket = func.date_trunc("month", Expense.expense_date)
+        ordering = bucket.asc()
+
+    rows = db.execute(
+        select(
+            bucket.label("bucket"),
+            func.sum(Expense.amount).label("total"),
+            func.count().label("count"),
+        )
+        .where(*filters)
+        .group_by(bucket)
+        .order_by(ordering)
+    ).all()
+
+    items: list[ExpenseSummaryItem] = []
+    grand_total = Decimal("0")
+    for row in rows:
+        key = str(row.bucket) if group_by == "category" else row.bucket.strftime("%Y-%m")
+        items.append(
+            ExpenseSummaryItem(
+                key=key,
+                total=row.total,
+                count=row.count,
+            )
+        )
+        grand_total += row.total
+
+    return ExpenseSummary(group_by=group_by, total=grand_total, items=items)
 
 
 def get_expense(db: Session, user: User, expense_id: int) -> Expense:

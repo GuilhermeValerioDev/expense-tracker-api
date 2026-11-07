@@ -354,3 +354,99 @@ def test_list_returns_empty_page(client: TestClient, headers: dict[str, str]) ->
 
     assert response.status_code == 200
     assert response.json() == {"items": [], "total": 0, "limit": 20, "offset": 0}
+
+
+def _create_summary_fixture(client: TestClient, headers: dict[str, str]) -> None:
+    _create(
+        client,
+        headers,
+        name="Coffee",
+        category="food",
+        amount="5.00",
+        expense_date="2026-01-10T10:00:00",
+    )
+    _create(
+        client,
+        headers,
+        name="Lunch",
+        category="food",
+        amount="15.00",
+        expense_date="2026-02-10T10:00:00",
+    )
+    _create(
+        client,
+        headers,
+        name="Bus",
+        category="transport",
+        amount="2.50",
+        expense_date="2026-02-11T10:00:00",
+    )
+
+
+def test_summary_by_category(client: TestClient, headers: dict[str, str]) -> None:
+    _create_summary_fixture(client, headers)
+
+    response = client.get("/api/v1/expenses/summary", headers=headers)
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["group_by"] == "category"
+    assert Decimal(body["total"]) == Decimal("22.50")
+
+    items = {item["key"]: item for item in body["items"]}
+    assert Decimal(items["food"]["total"]) == Decimal("20.00")
+    assert items["food"]["count"] == 2
+    assert Decimal(items["transport"]["total"]) == Decimal("2.50")
+    assert items["transport"]["count"] == 1
+
+
+def test_summary_by_month(client: TestClient, headers: dict[str, str]) -> None:
+    _create_summary_fixture(client, headers)
+
+    response = client.get("/api/v1/expenses/summary?group_by=month", headers=headers)
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["group_by"] == "month"
+    assert Decimal(body["total"]) == Decimal("22.50")
+    assert [item["key"] for item in body["items"]] == ["2026-01", "2026-02"]
+
+    items = {item["key"]: item for item in body["items"]}
+    assert Decimal(items["2026-01"]["total"]) == Decimal("5.00")
+    assert items["2026-01"]["count"] == 1
+    assert Decimal(items["2026-02"]["total"]) == Decimal("17.50")
+    assert items["2026-02"]["count"] == 2
+
+
+def test_summary_filters_by_date_range(client: TestClient, headers: dict[str, str]) -> None:
+    _create_summary_fixture(client, headers)
+
+    response = client.get(
+        "/api/v1/expenses/summary?start_date=2026-02-01T00:00:00&end_date=2026-02-28T23:59:59",
+        headers=headers,
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert Decimal(body["total"]) == Decimal("17.50")
+    items = {item["key"]: item for item in body["items"]}
+    assert Decimal(items["food"]["total"]) == Decimal("15.00")
+    assert Decimal(items["transport"]["total"]) == Decimal("2.50")
+
+
+def test_summary_rejects_inverted_date_range(
+    client: TestClient,
+    headers: dict[str, str],
+) -> None:
+    response = client.get(
+        "/api/v1/expenses/summary?start_date=2026-03-01T00:00:00&end_date=2026-01-01T00:00:00",
+        headers=headers,
+    )
+
+    assert response.status_code == 422
+
+
+def test_summary_requires_authentication(client: TestClient) -> None:
+    response = client.get("/api/v1/expenses/summary")
+
+    assert response.status_code == 401

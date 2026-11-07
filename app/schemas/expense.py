@@ -1,6 +1,6 @@
 from datetime import datetime
 from decimal import Decimal
-from typing import Annotated
+from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -50,3 +50,15 @@ class ExpensePage(BaseModel):
     total: int
     limit: int
     offset: int
+
+
+class ExpenseSummaryItem(BaseModel):
+    key: str
+    total: Decimal
+    count: int
+
+
+class ExpenseSummary(BaseModel):
+    group_by: Literal["category", "month"]
+    total: Decimal
+    items: list[ExpenseSummaryItem]
